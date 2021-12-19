@@ -2,6 +2,7 @@ require 'set'
 
 class Solution
   attr_reader :paths
+  attr_writer :allowed_small_cave
 
   def initialize
     @caves = {}
@@ -17,38 +18,41 @@ class Solution
     add_connection(caves.first, caves.last)
   end
 
-  # very very ugly
-  def find_paths(current_cave, path, allowed_small_cave, counter)
+  def find_paths(current_cave, path, allowed_small_cave_visits = 0)
     path.push(current_cave)
-    counter += 1 if current_cave == allowed_small_cave
+    allowed_small_cave_visits += 1 if current_cave == @allowed_small_cave
 
-    if current_cave == 'end'
+    if current_cave.end_cave?
       @paths.add(path)
     else
-      next_caves = @caves[current_cave].select do |neighbor|
-        if neighbor == 'start'
-          false
-        elsif neighbor == neighbor.upcase
-          true
-        elsif neighbor == allowed_small_cave && counter < 2
-          true
-        else
-          !(path.include? neighbor)
-        end
+      next_caves = neighbors(current_cave).select do |neighbor|
+        valid_neighbor?(neighbor, allowed_small_cave_visits, path)
       end
 
-      next_caves.each { |cave| find_paths(cave, path + [cave], allowed_small_cave, counter) }
+      next_caves.each { |cave| find_paths(cave, path + [cave], allowed_small_cave_visits) }
     end
   end
 
   def small_caves
-    @caves.keys.reject { |cave| cave == cave.upcase }
+    @caves.keys.select(&:small?)
   end
 
   private
 
+  def valid_neighbor?(neighbor, allowed_small_cave_visits, path)
+    if neighbor.start_cave?
+      false
+    elsif neighbor.big?
+      true
+    elsif neighbor == @allowed_small_cave && allowed_small_cave_visits < 2
+      true
+    else
+      !(path.include? neighbor)
+    end
+  end
+
   def relation_to_caves(relation)
-    relation.split('-')
+    relation.split('-').map { |name| Cave.new(name) }
   end
 
   def add_cave(cave)
@@ -59,6 +63,46 @@ class Solution
     @caves[cave_a].push(cave_b) unless @caves[cave_a].include? cave_b
     @caves[cave_b].push(cave_a) unless @caves[cave_b].include? cave_a
   end
+
+  def neighbors(cave)
+    @caves[cave]
+  end
+end
+
+class Cave
+  attr_reader :name
+
+  def initialize(name)
+    @name = name
+  end
+
+  def big?
+    @name == @name.upcase
+  end
+
+  def small?
+    !big? && !start_cave?
+  end
+
+  def end_cave?
+    name == 'end'
+  end
+
+  def start_cave?
+    name == 'start'
+  end
+
+  def hash
+    name.hash
+  end
+
+  def eql?(other)
+    other.name == name
+  end
+
+  def ==(other)
+    other.name == name
+  end
 end
 
 solution = Solution.new
@@ -67,7 +111,9 @@ File.readlines('input').map(&:chomp).each do |line|
   solution.read(line)
 end
 
+initial_cave = Cave.new('start')
 solution.small_caves.each do |small_cave|
-  solution.find_paths('start', ['start'], small_cave, 0)
+  solution.allowed_small_cave = small_cave
+  solution.find_paths(initial_cave, [initial_cave])
 end
 puts solution.paths.size
